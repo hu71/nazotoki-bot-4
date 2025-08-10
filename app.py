@@ -2,33 +2,37 @@ from flask import Flask, request, abort, render_template, redirect, url_for
 from linebot import LineBotApi, WebhookHandler
 from linebot.exceptions import InvalidSignatureError
 from linebot.models import (
-    MessageEvent, ImageMessage, TextSendMessage, ImageSendMessage, FollowEvent
+    MessageEvent, ImageMessage, TextMessage,
+    TextSendMessage, ImageSendMessage
 )
 from datetime import datetime
 
 app = Flask(__name__)
 
-# ここにあなたのアクセストークンとシークレットを直書きしてください
+# アクセストークンとシークレットを直書き（必要に応じて書き換えてください）
 LINE_CHANNEL_ACCESS_TOKEN = "00KCkQLhlaDFzo5+UTu+/C4A49iLmHu7bbpsfW8iamonjEJ1s88/wdm7Yrou+FazbxY7719UNGh96EUMa8QbsG Bf9K5rDWhJpq8XTxakXRuTM6HiJDSmERbIWfyfRMfscXJPcRyTL6YyGNZxqkYSAQdB04t89/1O/w1cDnyilFU="
 LINE_CHANNEL_SECRET = "6c12aedc292307f95ccd67e959973761"
 
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
-# Googleドライブ画像URL（共有リンクID部分を変更してください）
+# Googleドライブの問題画像URL
 PUZZLE_IMAGE_URL = "https://drive.google.com/uc?export=view&id=1GhjyvsaWP23x_wdz7n-nSqq5cziFcf1U"
 
+# 判定用に受け取った画像の情報を保存
 received_images = []
+
 
 @app.route("/")
 def index():
     return "LINE Bot is running."
 
+
 @app.route("/callback", methods=['POST'])
 def callback():
-    print("callback received")
     signature = request.headers.get('X-Line-Signature')
     body = request.get_data(as_text=True)
+    print("callback received")
     print(f"Request body: {body}")
 
     try:
@@ -42,23 +46,32 @@ def callback():
 
     return 'OK'
 
-@handler.add(FollowEvent)
-def handle_follow(event):
-    user_id = event.source.user_id
-    print(f"Follow event from user: {user_id}")
 
-    try:
+# 「2MB」と送ったら問題画像を送信
+@handler.add(MessageEvent, message=TextMessage)
+def handle_text(event):
+    user_text = event.message.text.strip()
+
+    if user_text == "2MB":
         line_bot_api.reply_message(
             event.reply_token,
             [
-                TextSendMessage(text="謎解きに参加してくれてありがとう！"),
                 TextSendMessage(text="それでは問題です。"),
-                ImageSendMessage(original_content_url=PUZZLE_IMAGE_URL, preview_image_url=PUZZLE_IMAGE_URL)
+                ImageSendMessage(
+                    original_content_url=PUZZLE_IMAGE_URL,
+                    preview_image_url=PUZZLE_IMAGE_URL
+                )
             ]
         )
-    except Exception as e:
-        print(f"Failed to reply FollowEvent: {e}")
+    else:
+        # デバッグ用：オウム返し
+        line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text=f"あなたが送ったのは: {user_text}")
+        )
 
+
+# 画像が送られたら判定用に記録
 @handler.add(MessageEvent, message=ImageMessage)
 def handle_image(event):
     user_id = event.source.user_id
@@ -72,6 +85,8 @@ def handle_image(event):
         "image_id": message_id,
     })
 
+
+# 主催者用の判定フォーム
 @app.route("/judge", methods=["GET", "POST"])
 def judge():
     global received_images
@@ -96,3 +111,7 @@ def judge():
         return redirect(url_for("judge"))
 
     return render_template("judge.html", images=received_images)
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
