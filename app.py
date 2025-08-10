@@ -1,94 +1,84 @@
-from flask import Flask, request, render_template, redirect, send_from_directory
-import requests
+from flask import Flask, request, abort, render_template, redirect, url_for
+from linebot import LineBotApi, WebhookHandler
+from linebot.exceptions import InvalidSignatureError
+from linebot.models import MessageEvent, ImageMessage, TextSendMessage, ImageSendMessage, FollowEvent
 import os
 from datetime import datetime
 
 app = Flask(__name__)
 
-LINE_CHANNEL_ACCESS_TOKEN = "00KCkQLhlaDFzo5+UTu+/C4A49iLmHu7bbpsfW8iamonjEJ1s88/wdm7Yrou+FazbxY7719UNGh96EUMa8QbsG Bf9K5rDWhJpq8XTxakXRuTM6HiJDSmERbIWfyfRMfscXJPcRyTL6YyGNZxqkYSAQdB04t89/1O/w1cDnyilFU="
-IMAGE_URL = "https://drive.google.com/uc?export=view&id=1GhjyvsaWP23x_wdz7n-nSqq5cziFcf1U"
+LINE_CHANNEL_ACCESS_TOKEN = os.getenv("00KCkQLhlaDFzo5+UTu+/C4A49iLmHu7bbpsfW8iamonjEJ1s88/wdm7Yrou+FazbxY7719UNGh96EUMa8QbsG Bf9K5rDWhJpq8XTxakXRuTM6HiJDSmERbIWfyfRMfscXJPcRyTL6YyGNZxqkYSAQdB04t89/1O/w1cDnyilFU=")
+LINE_CHANNEL_SECRET = os.getenv("6c12aedc292307f95ccd67e959973761")
 
-UPLOAD_FOLDER = "uploads"
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
+handler = WebhookHandler(LINE_CHANNEL_SECRET)
 
-pending_answers = {}
+PUZZLE_IMAGE_URL = "https://drive.google.com/uc?export=view&id=1GhjyvsaWP23x_wdz7n-nSqq5cziFcf1U"
 
-@app.route("/callback", methods=["POST"])
+received_images = []
+
+@app.route("/")
+def index():
+    return "LINE Bot is running."
+
+@app.route("/callback", methods=['POST'])
 def callback():
-    body = request.get_json()
+    signature = request.headers['X-Line-Signature']
+    body = request.get_data(as_text=True)
+    try:
+        handler.handle(body, signature)
+    except InvalidSignatureError:
+        abort(400)
+    return 'OK'
 
-    for event in body["events"]:
-        user_id = event["source"]["userId"]
+@handler.add(FollowEvent)
+def handle_follow(event):
+    user_id = event.source.user_id
+    line_bot_api.reply_message(
+        event.reply_token,
+        [
+            TextSendMessage(text="謎解きに参加してくれてありがとう！"),
+            TextSendMessage(text="それでは問題です。"),
+            ImageSendMessage(original_content_url=PUZZLE_IMAGE_URL, preview_image_url=PUZZLE_IMAGE_URL)
+        ]
+    )
 
-        if event["type"] == "follow":
-            push_image(user_id, IMAGE_URL)
-            push_text(user_id, "この画像を見て答えとなる写真を送ってください！")
+@handler.add(MessageEvent, message=ImageMessage)
+def handle_image(event):
+    user_id = event.source.user_id
+    message_id = event.message.id
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        elif event["type"] == "message" and event["message"]["type"] == "image":
-            message_id = event["message"]["id"]
-            filename = save_image_from_line(message_id)
-            pending_answers[user_id] = filename
-            push_text(user_id, "写真を受け取りました。判定結果をお待ちください。")
+    received_images.append({
+        "user_id": user_id,
+        "timestamp": timestamp,
+        "image_id": message_id,
+    })
 
-    return "OK"
-
-@app.route("/admin")
-def admin_panel():
-    return render_template("judge.html", answers=pending_answers)
-
-@app.route("/judge")
+@app.route("/judge", methods=["GET", "POST"])
 def judge():
-    user_id = request.args.get("user_id")
-    result = request.args.get("result")
+    global received_images
 
-    if result == "correct":
-        push_text(user_id, "正解！")
-    else:
-        push_text(user_id, "不正解。もう一度考えてみよう！")
+    if request.method == "POST":
+        image_id = request.form.get("image_id")
+        user_id = request.form.get("user_id")
+        judge = request.form.get("judge")
 
-    pending_answers.pop(user_id, None)
-    return redirect("/admin")
+        if not image_id or not user_id or judge not in ("correct", "wrong"):
+            return "Invalid input", 400
 
-@app.route("/uploads/<filename>")
-def uploaded_file(filename):
-    return send_from_directory(UPLOAD_FOLDER, filename)
+        text = "正解！" if judge == "correct" else "残念。もう一度考えてみよう！"
 
-def push_text(user_id, text):
-    url = "https://api.line.me/v2/bot/message/push"
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"
-    }
-    data = {"to": user_id, "messages": [{"type": "text", "text": text}]}
-    requests.post(url, headers=headers, json=data)
+        try:
+            line_bot_api.push_message(user_id, TextSendMessage(text=text))
+        except Exception as e:
+            return f"Failed to send message: {str(e)}", 500
 
-def push_image(user_id, image_url):
-    url = "https://api.line.me/v2/bot/message/push"
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"
-    }
-    data = {
-        "to": user_id,
-        "messages": [{
-            "type": "image",
-            "originalContentUrl": image_url,
-            "previewImageUrl": image_url
-        }]
-    }
-    requests.post(url, headers=headers, json=data)
+        received_images = [img for img in received_images if img["image_id"] != image_id]
 
-def save_image_from_line(message_id):
-    url = f"https://api-data.line.me/v2/bot/message/{message_id}/content"
-    headers = {"Authorization": f"Bearer {LINE_CHANNEL_ACCESS_TOKEN}"}
-    r = requests.get(url, headers=headers, stream=True)
-    filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}.jpg"
-    path = os.path.join(UPLOAD_FOLDER, filename)
-    with open(path, "wb") as f:
-        for chunk in r.iter_content(1024):
-            f.write(chunk)
-    return filename
+        return redirect(url_for("judge"))
+
+    return render_template("judge.html", images=received_images)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
-
+    app.run(debug=True, port=5000)
