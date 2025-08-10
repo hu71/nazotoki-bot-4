@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>判定フォーム</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        img { border: 1px solid #ccc; margin-bottom: 10px; }
+        .user-block { margin-bottom: 30px; }
+        .buttons a {
+            padding: 8px 12px;
+            margin: 0 5px;
+            border-radius: 4px;
+            color: #fff;
+            text-decoration: none;
+        }
+        .correct { background: #28a745; }
+        .wrong { background: #dc3545; }
+    </style>
+</head>
+<body>
+    <h1>判定フォーム</h1>
+    {% if answers %}
+        {% for user_id, filename in answers.items() %}
+            <div class="user-block">
+                <p>ユーザーID: {{ user_id }}</p>
+                <img src="/uploads/{{ filename }}" width="200"><br>
+                <div class="buttons">
+                    <a class="correct" href="/judge?user_id={{ user_id }}&result=correct">✅ 正解</a>
+                    <a class="wrong" href="/judge?user_id={{ user_id }}&result=wrong">❌ 不正解</a>
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p>判定待ちの写真はありません。</p>
+    {% endif %}
+</body>
+</html>
