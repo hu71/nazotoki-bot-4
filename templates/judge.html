@@ -1,38 +1,43 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8" />
     <title>判定フォーム</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin: 20px; }
-        img { border: 1px solid #ccc; margin-bottom: 10px; }
-        .user-block { margin-bottom: 30px; }
-        .buttons a {
-            padding: 8px 12px;
-            margin: 0 5px;
-            border-radius: 4px;
-            color: #fff;
-            text-decoration: none;
-        }
-        .correct { background: #28a745; }
-        .wrong { background: #dc3545; }
-    </style>
 </head>
 <body>
-    <h1>判定フォーム</h1>
-    {% if answers %}
-        {% for user_id, filename in answers.items() %}
-            <div class="user-block">
-                <p>ユーザーID: {{ user_id }}</p>
-                <img src="/uploads/{{ filename }}" width="200"><br>
-                <div class="buttons">
-                    <a class="correct" href="/judge?user_id={{ user_id }}&result=correct">✅ 正解</a>
-                    <a class="wrong" href="/judge?user_id={{ user_id }}&result=wrong">❌ 不正解</a>
-                </div>
-            </div>
-        {% endfor %}
+    <h1>参加者からの画像判定</h1>
+    {% if images|length == 0 %}
+        <p>現在、判定待ちの画像はありません。</p>
     {% else %}
-        <p>判定待ちの写真はありません。</p>
+        <table border="1" cellpadding="8" cellspacing="0">
+            <thead>
+                <tr>
+                    <th>送信時間</th>
+                    <th>ユーザーID</th>
+                    <th>画像</th>
+                    <th>判定</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for img in images %}
+                <tr>
+                    <td>{{ img.timestamp }}</td>
+                    <td>{{ img.user_id }}</td>
+                    <td>
+                        <img src="/image/{{ img.image_id }}" alt="送信画像" style="max-height:150px;">
+                    </td>
+                    <td>
+                        <form method="POST" style="display:inline;">
+                            <input type="hidden" name="image_id" value="{{ img.image_id }}">
+                            <input type="hidden" name="user_id" value="{{ img.user_id }}">
+                            <button type="submit" name="judge" value="correct">正解</button>
+                            <button type="submit" name="judge" value="wrong">不正解</button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
     {% endif %}
 </body>
 </html>
