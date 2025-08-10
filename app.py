@@ -7,8 +7,8 @@ from datetime import datetime
 
 app = Flask(__name__)
 
-LINE_CHANNEL_ACCESS_TOKEN = os.getenv("00KCkQLhlaDFzo5+UTu+/C4A49iLmHu7bbpsfW8iamonjEJ1s88/wdm7Yrou+FazbxY7719UNGh96EUMa8QbsG Bf9K5rDWhJpq8XTxakXRuTM6HiJDSmERbIWfyfRMfscXJPcRyTL6YyGNZxqkYSAQdB04t89/1O/w1cDnyilFU=")
-LINE_CHANNEL_SECRET = os.getenv("6c12aedc292307f95ccd67e959973761")
+LINE_CHANNEL_ACCESS_TOKEN = os.getenv("LINE_CHANNEL_ACCESS_TOKEN")
+LINE_CHANNEL_SECRET = os.getenv("LINE_CHANNEL_SECRET")
 
 line_bot_api = LineBotApi(LINE_CHANNEL_ACCESS_TOKEN)
 handler = WebhookHandler(LINE_CHANNEL_SECRET)
@@ -81,4 +81,7 @@ def judge():
     return render_template("judge.html", images=received_images)
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    # Renderでは不要なのでコメントアウトか削除でOK
+    # app.run(debug=True, port=5000)
+    pass
+
